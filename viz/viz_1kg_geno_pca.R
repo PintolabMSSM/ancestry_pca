@@ -4,6 +4,7 @@
 
 suppressMessages(library(reshape2))
 suppressMessages(library(argparser))
+suppressMessages(library(tidyverse))
 p = arg_parser('Read in the plink .eigenvec & .eigenval files produced by merge_1kg_geno_PCA.sh and use the known ancestry associated with the 1kg samples to assign ancestry to the merged in data we supplied.')
 p = add_argument(p, 'pcadir', help='Base path containing the PCA results')
 p = add_argument(p, 'pcafile', help='Base file name of PCA results')
@@ -79,11 +80,13 @@ est_ancestry = function(eigenvec,g,x,y,conflevel,savepath){
 ##############################################################
 
 # read in the eigenvectors, produced in PLINK
+#eigenvec = data.frame(read.table(paste0(pcadir,'/',"Capstone4.sel.hasPhenosOnly.idsync.2allele.maf01.mind05.geno05.hwe1e-6.deduped.vcf.all_phase3.d> upeByPos_bestMAF.eigenvec"), header=FALSE, skip=0, sep=' '))
 eigenvec = data.frame(read.table(paste0(pcadir,'/',pcafile,'.eigenvec'), header=FALSE, skip=0, sep=' '))
 eigenval = t(data.frame(read.table(paste0(pcadir,'/',pcafile,'.eigenval'), header=FALSE, skip=0, sep=' ')))
 rownames(eigenvec) = eigenvec[,2]
 eigenvec = eigenvec[,3:ncol(eigenvec)]
-colnames(eigenvec) = colnames(eigenval) = paste0('PC', c(1:20))
+#colnames(eigenvec) = colnames(eigenval) = paste0('PC', c(1:20)) # (!!) check this out, eigenval columns should be the same as eigenvec cols???
+colnames(eigenvec) = paste0('PC', c(1:20))
 
 # read in the 1kg metadata & read population from 3rd column (col name varies between metadata files I prepared)
 ped = data.frame(read.table(kgpopfile, header=TRUE, skip=0, sep='\t'))
@@ -105,8 +108,10 @@ eigenvec = cbind(eigenvec, ped[, 'ancestry'][match(rownames(eigenvec), rownames(
 colnames(eigenvec)[21] = 'ancestry'
 
 # Our samples do not match IDs in the 1kg ped file, so where Ancestry is NA, set Ancestry to 'This study'
-levels(eigenvec[,'ancestry']) = c(levels(eigenvec[,'ancestry']),'This study')
-eigenvec[is.na(eigenvec['ancestry']),'ancestry'] = 'This study'
+#levels(eigenvec[,'ancestry']) = c(levels(eigenvec[,'ancestry']),'This study')
+#eigenvec[is.na(eigenvec['ancestry']),'ancestry'] = 'This study'
+eigenvec <- eigenvec %>% replace_na(list(ancestry = 'This study'))
+levels(eigenvec$ancestry) <- unique(eigenvec$ancestry)
 
 # Prepare manual color scale
 library(RColorBrewer)
@@ -165,4 +170,4 @@ anc_est = anc %>% group_by(ID) %>% summarize(ancestry_est = paste0(sort(unique(e
 annot_eigenvec$ID = row.names(annot_eigenvec)
 ancestry_estimated = filter(annot_eigenvec,ancestry=='This study') %>% left_join(anc_est,by='ID')
 
-write.table(ancestry_estimated,paste0(outdir,pcafile,'.ancestry_est'),sep='\t',quote=F)
+write.table(ancestry_estimated,paste0(outdir,pcafile,'.ancestry_est.conflevel',conflevel),sep='\t',quote=F)
