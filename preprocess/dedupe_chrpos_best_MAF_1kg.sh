@@ -1,11 +1,15 @@
 #!/bin/bash
 
-# Preprocess 1KG reference to make a reference containing only SNPs that are unique by position. When duplicates are found, the SNP with the higher MAF is kept. 
+# Preprocess 1KG reference to make a reference containing only SNPs that are unique by position.
+# When duplicates are found, the SNP with the higher MAF is kept.
 
 module load plink/1.90
+#ml plink2/2.3
 
-refdir=/sc/arion/projects/pintod02c/1kg_phase3/
-tmpdir=/sc/arion/scratch/belmoj01/QTL_VCF/
+#refdir=/sc/arion/projects/pintod02c/1kg_phase3/
+refdir=/sc/arion/projects/EPIASD/splicingQTL/scripts/pre_fastQTL/PCA/1kg_phase3
+#tmpdir=/sc/arion/scratch/belmoj01/QTL_VCF/
+tmpdir=/sc/arion/scratch/alvesc04/qtl_vcf
 refname=all_phase3
 uqidname=$refname.uniqueIDs
 outname=$refname.dedupeByPos_bestMAF
@@ -26,27 +30,30 @@ mkdir -p $tmpdir
 
 ##################################################
 # Copy 1kg reference to tmp folder
-cp $refdir${refname}.{bed,bim,fam} $tmpdir
+cp $refdir/${refname}.{bed,bim,fam} $tmpdir
 
 # Remap IDs in .bim file to unique integer IDs (row # in the .bim file)
 #awk 'BEGIN{OFS=FS="\t"}; {print $1,$1":"$4":"$5":"$6":"$2"_"NR,$3,$4,$5,$6}' $tmpdir${refname}.bim > $tmpdir${refname}.newIDs.bim # Using chr:pos:allele:altallele as an ID leads to memory problems when re-mapping IDs later, so use row int instead
-awk 'BEGIN{OFS=FS="\t"}; {print $1,NR,$3,$4,$5,$6}' $tmpdir${refname}.bim > $tmpdir${refname}.newIDs.bim
+awk 'BEGIN{OFS=FS="\t"}; {print $1,NR,$3,$4,$5,$6}' $tmpdir/${refname}.bim > $tmpdir/${refname}.newIDs.bim
 # Make maps of chr:pos & RSID to new integer ID 
 #awk 'BEGIN{OFS=FS="\t"}; {print $1":"$4":"$5":"$6":"$2"_"NR,$2,$1":"$4}' $tmpdir${refname}.bim > $tmpdir${refname}.idmap # See note above
-awk 'BEGIN{OFS=FS="\t"}; {print NR,$2,$1":"$4}' $tmpdir${refname}.bim > $tmpdir${refname}.idmap
-# Swap out the old .bim file for our newly created one  & rename files
-mv $tmpdir${refname}.newIDs.bim $tmpdir${uqidname}.bim
-mv $tmpdir${refname}.bed $tmpdir${uqidname}.bed
-mv $tmpdir${refname}.fam $tmpdir${uqidname}.fam 
+awk 'BEGIN{OFS=FS="\t"}; {print NR,$2,$1":"$4}' $tmpdir/${refname}.bim > $tmpdir/${refname}.idmap
+# Swap out the old .bim file for our newly created one & rename files
+mv $tmpdir/${refname}.newIDs.bim $tmpdir/${uqidname}.bim
+mv $tmpdir/${refname}.bed $tmpdir/${uqidname}.bed
+mv $tmpdir/${refname}.fam $tmpdir/${uqidname}.fam
 
 # Make MAF report w/ new IDs
-plink --bfile $tmpdir$uqidname \
+plink --bfile $tmpdir/$uqidname \
       --allow-extra-chr \
       --freq \
-      --out ${tmpdir}${uqidname}
+      --out ${tmpdir}/${uqidname}
 
 # .frq file formatting is wonky (multiple spaces as delimiters+has leading spaces) so convert to tab-delimited first
-tr -s ' ' < ${tmpdir}${uqidname}.frq | sed -e 's/^[ ]//g' | sed -e 's/[ ]/\t/g' >  ${tmpdir}${uqidname}.frq.tab
+tr -s ' ' < ${tmpdir}/${uqidname}.frq | sed -e 's/^[ ]//g' | sed -e 's/[ ]/\t/g' >  ${tmpdir}/${uqidname}.frq.tab
+# perhaps the .afreq file is OK, but just in case, we will keep the procedure:
+#tr -s ' ' < ${tmpdir}/${uqidname}.afreq | sed -e 's/^[ ]//g' | sed -e 's/[ ]/\t/g' >  ${tmpdir}/${uqidname}.afreq.tab
+
 
 ################################################
 # Deduplicate chr:pos by MAF
@@ -62,17 +69,17 @@ awk 'BEGIN{OFS=FS="\t"};
    }
   };
   END{for(sid in chrpos){print chrpos[sid],sid}}
- ' ${tmpdir}${uqidname}.frq.tab $tmpdir${refname}.idmap > $tmpdir${refname}.idmap.deduped 
+ ' ${tmpdir}/${uqidname}.frq.tab $tmpdir/${refname}.idmap > $tmpdir/${refname}.idmap.deduped
 
 # Extract the first column of the deduped ID map since these are the plink IDs to extract from the file before we rename  
-cut -d$'\t' -f2 $tmpdir${refname}.idmap.deduped > $tmpdir${refname}.idmap.deduped.extract.in
+cut -d$'\t' -f2 $tmpdir/${refname}.idmap.deduped > $tmpdir/${refname}.idmap.deduped.extract.in
 
 #########################################
 # Filter the 1kg reference to keep just the unique IDs selected in the last step, which should now be unique by chr:pos.
 # Then, remap the unique IDs to chr:pos. This leaves a reference containing 84,280,783 SNPs when using the 1KG all phase 3 data.
-plink --bfile $tmpdir$uqidname \
+plink --bfile $tmpdir/$uqidname \
       --allow-extra-chr \
-      --extract $tmpdir${refname}.idmap.deduped.extract.in \
-      --update-name $tmpdir${refname}.idmap.deduped \
+      --extract $tmpdir/${refname}.idmap.deduped.extract.in \
+      --update-name $tmpdir/${refname}.idmap.deduped \
       --make-bed \
-      --out ${tmpdir}${outname}
+      --out ${tmpdir}/${outname}
